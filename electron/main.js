@@ -352,28 +352,6 @@ function escapeAppleScriptPath(p) {
   return p.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function buildNSFilenamesBuffer(paths) {
-  const escapeXml = (s) => s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-  const items = paths.map((p) => `<string>${escapeXml(p)}</string>`).join('');
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><array>${items}</array></plist>`;
-  const tmp = path.join(os.tmpdir(), `kc-fn-${process.pid}-${Date.now()}.plist`);
-  const bin = `${tmp}.bin`;
-  try {
-    fs.writeFileSync(tmp, xml, 'utf8');
-    execFileSync('plutil', ['-convert', 'binary1', '-o', bin, tmp], { timeout: 5000 });
-    return fs.readFileSync(bin);
-  } finally {
-    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-    try { fs.unlinkSync(bin); } catch { /* ignore */ }
-  }
-}
-
 function copyOk() {
   return { ok: true };
 }
@@ -391,14 +369,7 @@ function isImagePath(full) {
 }
 
 // AIGC START
-/** 用 Electron 直接写入 NSFilenames，供访达/桌面 ⌘V 粘贴 */
-function copyPathsViaElectronBuffers(paths) {
-  const uriList = `${paths.map((p) => pathToFileURL(p).href).join('\r\n')}\r\n`;
-  clipboard.writeBuffer('NSFilenamesPboardType', buildNSFilenamesBuffer(paths));
-  clipboard.writeBuffer('text/uri-list', Buffer.from(uriList, 'utf8'));
-}
-
-/** 不经过 Finder，避免打包环境下 Finder 超时/无权限 */
+/** osascript 写入文件别名 — 经验证 Electron writeBuffer 无法在访达粘贴 */
 function copyPathsViaOsascript(paths) {
   if (paths.length === 1) {
     const p = escapeAppleScriptPath(paths[0]);
@@ -417,6 +388,21 @@ function copyPathsViaOsascript(paths) {
   );
 }
 
+/** 用 clipboard info 确认剪贴板里是 alias / list，避免假成功 */
+function verifyOsascriptFileClipboard(paths) {
+  try {
+    const info = execFileSync('osascript', ['-e', 'clipboard info'], {
+      encoding: 'utf8',
+      timeout: 3000,
+    }).trim();
+    if (!info) return false;
+    if (paths.length === 1) return /alias/i.test(info);
+    return /list/i.test(info);
+  } catch {
+    return false;
+  }
+}
+
 function copyPathsAsFiles(paths) {
   if (!paths.length) return false;
   if (process.platform !== 'darwin') {
@@ -424,15 +410,10 @@ function copyPathsAsFiles(paths) {
     return true;
   }
   try {
-    copyPathsViaElectronBuffers(paths);
-    return true;
+    copyPathsViaOsascript(paths);
+    return verifyOsascriptFileClipboard(paths);
   } catch {
-    try {
-      copyPathsViaOsascript(paths);
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
