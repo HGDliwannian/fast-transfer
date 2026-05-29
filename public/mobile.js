@@ -117,11 +117,6 @@
         await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
         return (await verifyClipboardImage()) ? { ok: true } : { ok: false, message: '复制失败' };
       }
-      if (/\.(txt|md|json|csv|log|xml|html|css|js|ts|py|sh|yaml|yml)$/i.test(file.name)) {
-        const text = await (await fetch(url)).text();
-        await navigator.clipboard.writeText(text);
-        return (await verifyClipboardText(text)) ? { ok: true } : { ok: false, message: '复制失败' };
-      }
       await navigator.clipboard.writeText(url);
       return (await verifyClipboardText(url)) ? { ok: true } : { ok: false, message: '复制失败' };
     } catch (err) {

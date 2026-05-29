@@ -171,30 +171,11 @@
   async function runCopyWithFastToast(copyFn) {
     const res = await copyFn();
     if (res?.ok) {
-      await showInfoToast(COPY_OK_TOAST, 500);
+      showInfoToast(COPY_OK_TOAST, 500);
     } else {
-      await showInfoToast(res?.message || '复制失败', 500, 'error');
+      showInfoToast(res?.message || '复制失败', 500, 'error');
     }
     return res;
-  }
-
-  async function verifyWebClipboardImage() {
-    if (!navigator.clipboard?.read) return true;
-    try {
-      const items = await navigator.clipboard.read();
-      return items.some((item) => item.types.some((t) => t.startsWith('image/')));
-    } catch {
-      return false;
-    }
-  }
-
-  async function verifyWebClipboardText(expected) {
-    if (!navigator.clipboard?.readText) return true;
-    try {
-      return (await navigator.clipboard.readText()) === expected;
-    } catch {
-      return false;
-    }
   }
 
   function formatSize(bytes) {
@@ -316,18 +297,10 @@
         const blob = await res.blob();
         const type = blob.type || 'image/png';
         await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-        const ok = await verifyWebClipboardImage();
-        return ok ? { ok: true } : { ok: false, message: '复制失败' };
-      }
-      if (/\.(txt|md|json|csv|log|xml|html|css|js|ts|py|sh|yaml|yml)$/i.test(file.name)) {
-        const text = await (await fetch(url)).text();
-        await navigator.clipboard.writeText(text);
-        const ok = await verifyWebClipboardText(text);
-        return ok ? { ok: true } : { ok: false, message: '复制失败' };
+        return { ok: true };
       }
       await navigator.clipboard.writeText(url);
-      const ok = await verifyWebClipboardText(url);
-      return ok ? { ok: true } : { ok: false, message: '复制失败' };
+      return { ok: true };
     } catch (err) {
       return { ok: false, message: err.message || '复制失败' };
     }
@@ -346,11 +319,9 @@
     }
 
     try {
-      const lines = files.map((f) => fileUrl(f));
-      const text = lines.join('\n');
+      const text = files.map((f) => fileUrl(f)).join('\n');
       await navigator.clipboard.writeText(text);
-      const ok = await verifyWebClipboardText(text);
-      return ok ? { ok: true } : { ok: false, message: '批量复制失败' };
+      return { ok: true };
     } catch (err) {
       return { ok: false, message: err.message || '批量复制失败' };
     }

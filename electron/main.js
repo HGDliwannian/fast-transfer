@@ -341,31 +341,12 @@ ipcMain.handle('reveal-file', (_e, name) => {
 });
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.heic'];
-const TEXT_EXTS = ['.txt', '.md', '.json', '.csv', '.log', '.xml', '.html', '.css', '.js', '.ts', '.py', '.sh', '.yaml', '.yml'];
 
 const OSASCRIPT_OPTS = {
   encoding: 'utf8',
-  timeout: 20000,
-  maxBuffer: 20 * 1024 * 1024,
+  timeout: 8000,
+  maxBuffer: 4 * 1024 * 1024,
 };
-
-const COPY_JPEG_SCRIPT = `on run argv
-  set pf to POSIX file (item 1 of argv)
-  set the clipboard to (read pf as JPEG picture)
-end run`;
-
-const COPY_PNG_SCRIPT = `on run argv
-  set pf to POSIX file (item 1 of argv)
-  set the clipboard to (read pf as «class PNGf»)
-end run`;
-
-function sleepMs(ms) {
-  if (ms <= 0) return;
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    /* 等待剪贴板写入完成 */
-  }
-}
 
 function escapeAppleScriptPath(p) {
   return p.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -401,69 +382,6 @@ function copyFail(message = '复制失败') {
   return { ok: false, message };
 }
 
-function verifyImageClipboard() {
-  try {
-    const img = clipboard.readImage();
-    if (img && !img.isEmpty()) return true;
-  } catch {
-    /* ignore */
-  }
-
-  if (process.platform !== 'darwin') return false;
-
-  try {
-    const r = execFileSync(
-      'osascript',
-      ['-e', `try
-  the clipboard as JPEG picture
-  return "1"
-on error
-  try
-    the clipboard as «class PNGf»
-    return "1"
-  on error
-    return "0"
-  end try
-end try`],
-      { encoding: 'utf8', timeout: 5000 },
-    ).trim();
-    return r === '1';
-  } catch {
-    return false;
-  }
-}
-
-function verifyTextClipboard(expected) {
-  try {
-    return clipboard.readText() === expected;
-  } catch {
-    return false;
-  }
-}
-
-function verifyDarwinFilesClipboard(paths) {
-  try {
-    const formats = clipboard.availableFormats();
-    if (formats.some((f) => /filename|file-url|furl/i.test(f))) return true;
-    const uri = clipboard.read('text/uri-list') || '';
-    return paths.every((p) => uri.includes(pathToFileURL(p).href));
-  } catch {
-    return false;
-  }
-}
-
-function focusAppForClipboard() {
-  try {
-    app.focus({ steal: true });
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
 function fileExt(full) {
   return path.extname(full).toLowerCase();
 }
@@ -472,25 +390,21 @@ function isImagePath(full) {
   return IMAGE_EXTS.includes(fileExt(full));
 }
 
-function runOsascript(script, argv) {
-  execFileSync('osascript', ['-e', script, ...argv], OSASCRIPT_OPTS);
-}
-
-function copyDarwinFilesViaElectron(paths) {
+// AIGC START
+/** 用 Electron 直接写入 NSFilenames，供访达/桌面 ⌘V 粘贴 */
+function copyPathsViaElectronBuffers(paths) {
   const uriList = `${paths.map((p) => pathToFileURL(p).href).join('\r\n')}\r\n`;
-  clipboard.writeBuffer('text/uri-list', Buffer.from(uriList, 'utf8'));
   clipboard.writeBuffer('NSFilenamesPboardType', buildNSFilenamesBuffer(paths));
-  for (const p of paths) {
-    clipboard.writeBuffer('public.file-url', Buffer.from(pathToFileURL(p).href, 'utf8'));
-  }
+  clipboard.writeBuffer('text/uri-list', Buffer.from(uriList, 'utf8'));
 }
 
-function copyDarwinFilesViaFinder(paths) {
+/** 不经过 Finder，避免打包环境下 Finder 超时/无权限 */
+function copyPathsViaOsascript(paths) {
   if (paths.length === 1) {
     const p = escapeAppleScriptPath(paths[0]);
     execFileSync(
       'osascript',
-      ['-e', `tell application "Finder" to set the clipboard to (POSIX file "${p}" as alias)`],
+      ['-e', `set the clipboard to (POSIX file "${p}" as alias)`],
       OSASCRIPT_OPTS,
     );
     return;
@@ -498,166 +412,80 @@ function copyDarwinFilesViaFinder(paths) {
   const items = paths.map((p) => `POSIX file "${escapeAppleScriptPath(p)}" as alias`).join(', ');
   execFileSync(
     'osascript',
-    ['-e', `tell application "Finder" to set the clipboard to {${items}}`],
+    ['-e', `set the clipboard to {${items}}`],
     OSASCRIPT_OPTS,
   );
 }
 
-function copyDarwinFilesToClipboard(paths) {
-  focusAppForClipboard();
-  try {
-    copyDarwinFilesViaElectron(paths);
-    if (verifyDarwinFilesClipboard(paths)) return;
-  } catch {
-    /* 尝试 Finder 备用方案 */
+function copyPathsAsFiles(paths) {
+  if (!paths.length) return false;
+  if (process.platform !== 'darwin') {
+    clipboard.writeText(paths.map((p) => pathToFileURL(p).href).join('\n'));
+    return true;
   }
-  copyDarwinFilesViaFinder(paths);
+  try {
+    copyPathsViaElectronBuffers(paths);
+    return true;
+  } catch {
+    try {
+      copyPathsViaOsascript(paths);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
-/** 大图 PNG 等先经 sips 转 JPEG，再写入剪贴板，微信/Cursor 才能粘贴为图片 */
-function copyImageForChatPaste(full) {
-  const tmp = path.join(os.tmpdir(), `kuai-chuan-clip-${process.pid}-${Date.now()}.jpg`);
+function copyImageBitmap(full) {
+  let img = nativeImage.createFromPath(full);
+  if (img.isEmpty()) {
+    try {
+      img = nativeImage.createFromBuffer(fs.readFileSync(full));
+    } catch {
+      return false;
+    }
+  }
+  if (img.isEmpty()) return false;
+  clipboard.writeImage(img);
+  return true;
+}
+
+function copyImageWithSipsJpeg(full) {
+  const tmp = path.join(os.tmpdir(), `kc-clip-${process.pid}-${Date.now()}.jpg`);
   try {
     execFileSync(
       'sips',
       ['-Z', '4096', '-s', 'format', 'jpeg', '-s', 'formatOptions', '88', full, '--out', tmp],
-      { timeout: 120000 },
+      { timeout: 60000 },
     );
     if (!fs.existsSync(tmp) || fs.statSync(tmp).size === 0) return false;
-    runOsascript(COPY_JPEG_SCRIPT, [tmp]);
     const img = nativeImage.createFromPath(tmp);
-    if (!img.isEmpty()) clipboard.writeImage(img);
-    sleepMs(80);
-    return verifyImageClipboard();
+    if (img.isEmpty()) return false;
+    clipboard.writeImage(img);
+    return true;
   } catch {
     return false;
   } finally {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      /* ignore */
-    }
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
   }
-}
-
-function copyImageAsPngForChatPaste(full) {
-  const tmp = path.join(os.tmpdir(), `kuai-chuan-clip-png-${process.pid}-${Date.now()}.png`);
-  try {
-    execFileSync('sips', ['-Z', '4096', '-s', 'format', 'png', full, '--out', tmp], { timeout: 120000 });
-    if (!fs.existsSync(tmp) || fs.statSync(tmp).size === 0) return false;
-    runOsascript(COPY_PNG_SCRIPT, [tmp]);
-    const img = nativeImage.createFromPath(tmp);
-    if (!img.isEmpty()) clipboard.writeImage(img);
-    sleepMs(80);
-    return verifyImageClipboard();
-  } catch {
-    return false;
-  } finally {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-function writeImageNative(full) {
-  let img = nativeImage.createFromPath(full);
-  if (img.isEmpty()) img = nativeImage.createFromBuffer(fs.readFileSync(full));
-  if (img.isEmpty()) return false;
-  clipboard.writeImage(img);
-  sleepMs(80);
-  return verifyImageClipboard();
 }
 
 function copyImageToClipboard(full) {
-  focusAppForClipboard();
-
-  if (process.platform === 'darwin') {
-    const attempts = [
-      () => copyImageForChatPaste(full),
-      () => writeImageNative(full),
-      () => copyImageAsPngForChatPaste(full),
-    ];
-    for (const attempt of attempts) {
-      try {
-        if (attempt()) return copyOk();
-      } catch {
-        /* 尝试下一种写入方式 */
-      }
-    }
-    return copyFail();
-  }
-
-  return writeImageNative(full) ? copyOk() : copyFail();
-}
-
-function copyDarwinFilesWithVerify(paths) {
-  try {
-    copyDarwinFilesToClipboard(paths);
-    sleepMs(80);
-    if (verifyDarwinFilesClipboard(paths)) return true;
-    copyDarwinFilesToClipboard(paths);
-    sleepMs(120);
-    return verifyDarwinFilesClipboard(paths);
-  } catch {
-    return false;
-  }
-}
-
-function copyTextFileToClipboard(full) {
-  const text = fs.readFileSync(full, 'utf8');
-  clipboard.writeText(text);
-  sleepMs(50);
-  return verifyTextClipboard(text);
+  if (copyImageBitmap(full)) return copyOk();
+  if (process.platform === 'darwin' && copyImageWithSipsJpeg(full)) return copyOk();
+  return copyFail();
 }
 
 function copyOneFileByPath(full) {
   if (!fs.existsSync(full)) return copyFail('文件不存在');
-
   if (isImagePath(full)) return copyImageToClipboard(full);
-
-  if (TEXT_EXTS.includes(fileExt(full))) {
-    try {
-      return copyTextFileToClipboard(full) ? copyOk() : copyFail();
-    } catch {
-      return copyFail();
-    }
-  }
-
-  if (process.platform === 'darwin') {
-    try {
-      return copyDarwinFilesWithVerify([full]) ? copyOk() : copyFail();
-    } catch (err) {
-      return copyFail(err.message || '复制失败');
-    }
-  }
-
-  clipboard.writeText(full);
-  sleepMs(50);
-  return verifyTextClipboard(full) ? copyOk() : copyFail();
+  return copyPathsAsFiles([full]) ? copyOk() : copyFail();
 }
 
 function copyManyFilesByPaths(paths) {
-  const imagePaths = paths.filter(isImagePath);
-
-  if (process.platform === 'darwin' && imagePaths.length > 0) {
-    return copyImageToClipboard(imagePaths[0]);
-  }
-
-  if (process.platform === 'darwin') {
-    try {
-      return copyDarwinFilesWithVerify(paths) ? copyOk() : copyFail();
-    } catch (err) {
-      return copyFail(err.message || '批量复制失败');
-    }
-  }
-
-  const text = paths.join('\n');
-  clipboard.writeText(text);
-  sleepMs(50);
-  return verifyTextClipboard(text) ? copyOk() : copyFail();
+  return copyPathsAsFiles(paths) ? copyOk() : copyFail('批量复制失败');
 }
+// AIGC END
 
 ipcMain.handle('copy-file', (_e, name) => {
   const full = path.join(fileServer.getSaveDir(), path.basename(name));
