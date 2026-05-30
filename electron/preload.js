@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('snapdrop', {
   getStatus: () => ipcRenderer.invoke('get-status'),
+  restartService: () => ipcRenderer.invoke('restart-service'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setLaunchAtLogin: (enabled) => ipcRenderer.invoke('set-launch-at-login', enabled),
   chooseSaveDir: () => ipcRenderer.invoke('choose-save-dir'),

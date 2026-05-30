@@ -280,7 +280,7 @@ function updateTrayMenu() {
 const TRAY_ICON_DATA =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVQ4T2NkYGD4z0ABYBw1gGE0DBhGQ8NgGA0DBhGQ8AAA0Q8BfqQh6QAAAABJRU5ErkJggg==';
 
-ipcMain.handle('get-status', async () => {
+async function buildServerStatus() {
   if (!fileServer) await startServer();
   const ip = fileServer.getLanIp();
   const port = fileServer.port;
@@ -294,7 +294,16 @@ ipcMain.handle('get-status', async () => {
     qrDataUrl,
     saveDir: fileServer.getSaveDir(),
   };
+}
+
+ipcMain.handle('get-status', () => buildServerStatus());
+
+// AIGC START
+ipcMain.handle('restart-service', async () => {
+  await startServer();
+  return buildServerStatus();
 });
+// AIGC END
 
 ipcMain.handle('get-settings', () => {
   const cfg = loadConfig();

@@ -442,19 +442,19 @@
     }
   }
 
-  async function loadAccessInfo() {
-    const applyStatus = (status) => {
-      setAccessUrl(status.mobileUrl || status.url);
-      if (status.qrDataUrl) {
-        qrcodeEl.innerHTML = `<img src="${status.qrDataUrl}" alt="扫码访问" />`;
-      }
-      if (saveDirEl) saveDirEl.textContent = status.saveDir || '—';
-    };
+  function applyAccessStatus(status) {
+    setAccessUrl(status.mobileUrl || status.url);
+    if (status.qrDataUrl && qrcodeEl) {
+      qrcodeEl.innerHTML = `<img src="${status.qrDataUrl}" alt="扫码访问" />`;
+    }
+    if (saveDirEl) saveDirEl.textContent = status.saveDir || '—';
+  }
 
+  async function loadAccessInfo() {
     try {
       const res = await fetch('/api/status');
       const data = await res.json();
-      applyStatus({
+      applyAccessStatus({
         mobileUrl: data.mobileUrl || (data.url ? `${data.url}/` : baseUrl),
         url: data.url,
         qrDataUrl: data.qrDataUrl,
@@ -466,10 +466,21 @@
 
     if (isNative && window.snapdrop?.getStatus) {
       window.snapdrop.getStatus()
-        .then((status) => applyStatus(status))
+        .then((status) => applyAccessStatus(status))
         .catch(() => {});
     }
   }
+
+  // AIGC START
+  async function reloadServiceAndAccess() {
+    if (isNative && window.snapdrop?.restartService) {
+      const status = await window.snapdrop.restartService();
+      applyAccessStatus(status);
+      return;
+    }
+    await loadAccessInfo();
+  }
+  // AIGC END
 
   async function doUpload(files) {
     if (!files.length) return;
@@ -709,8 +720,18 @@
   }
 
   document.getElementById('btnRefresh').addEventListener('click', async () => {
-    await refreshFiles();
-    await showInfoToast('刷新成功');
+    const btn = document.getElementById('btnRefresh');
+    if (btn) btn.disabled = true;
+    try {
+      await reloadServiceAndAccess();
+      connectEvents();
+      await refreshFiles();
+      await showInfoToast('刷新成功');
+    } catch {
+      await showInfoToast('刷新失败', 500, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
   async function onCheckUpdateClick() {
