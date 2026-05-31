@@ -407,12 +407,24 @@ function getCopyFilesBinary() {
   return null;
 }
 
-/** Swift NSPasteboard.writeObjects — 写入 furl，访达可粘贴 */
+// AIGC START — 访达可识别的文件列表剪贴板（原生工具读写，避免 Electron/swift -e 误判）
 function copyPathsViaNative(paths) {
   const bin = getCopyFilesBinary();
   if (!bin) return false;
   execFileSync(bin, paths, { timeout: 10000 });
   return true;
+}
+
+function readClipboardPathsViaNative() {
+  const bin = getCopyFilesBinary();
+  if (!bin) return [];
+  try {
+    const out = execFileSync(bin, ['--read-paths'], { encoding: 'utf8', timeout: 3000 }).trim();
+    if (!out) return [];
+    return out.split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function copyPathsViaOsascript(paths) {
@@ -441,24 +453,23 @@ function sameFilePath(a, b) {
   }
 }
 
-// AIGC START — 用 AppleScript 校验剪贴板是否已为访达可粘贴的文件
+function pathsMatchClipboard(listed, expected) {
+  if (listed.length !== expected.length) return false;
+  return expected.every((p, i) => listed[i] && sameFilePath(listed[i], p));
+}
+
 function verifyFileClipboard(paths) {
   if (process.platform !== 'darwin') return true;
+  const listed = readClipboardPathsViaNative();
+  if (pathsMatchClipboard(listed, paths)) return true;
+  if (paths.length !== 1) return false;
   try {
-    if (paths.length === 1) {
-      const clip = execFileSync(
-        'osascript',
-        ['-e', 'try\nPOSIX path of (the clipboard as alias)\nend try'],
-        { encoding: 'utf8', timeout: 3000 },
-      ).trim();
-      return clip && sameFilePath(clip, paths[0]);
-    }
-    const count = execFileSync(
+    const clip = execFileSync(
       'osascript',
-      ['-e', 'try\ncount of the clipboard\nend try'],
+      ['-e', 'try\nPOSIX path of (the clipboard as alias)\nend try'],
       { encoding: 'utf8', timeout: 3000 },
     ).trim();
-    return parseInt(count, 10) === paths.length;
+    return clip && sameFilePath(clip, paths[0]);
   } catch {
     return false;
   }
@@ -472,18 +483,22 @@ function copyPathsAsFiles(paths) {
     return true;
   }
 
-  try {
+  const tryNative = () => {
+    if (!getCopyFilesBinary()) return false;
+    copyPathsViaNative(resolved);
+    return verifyFileClipboard(resolved);
+  };
+  const tryOsascript = () => {
     copyPathsViaOsascript(resolved);
-    if (verifyFileClipboard(resolved)) return true;
-  } catch { /* fallback */ }
+    return verifyFileClipboard(resolved);
+  };
 
   try {
-    if (getCopyFilesBinary()) {
-      copyPathsViaNative(resolved);
-      if (verifyFileClipboard(resolved)) return true;
-    }
+    if (tryNative()) return true;
+  } catch { /* fallback */ }
+  try {
+    if (tryOsascript()) return true;
   } catch { /* ignore */ }
-
   return false;
 }
 // AIGC END
@@ -528,14 +543,27 @@ function copyImageToClipboard(full) {
   return copyFail();
 }
 
-function copyOneFileByPath(full) {
-  if (!fs.existsSync(full)) return copyFail('文件不存在');
-  return copyPathsAsFiles([full]) ? copyOk() : copyFail('无法拷贝为访达文件，请重试');
+function resolveFileForCopy(name) {
+  const saveDir = fileServer?.getSaveDir();
+  if (!saveDir || !name) return null;
+  const base = path.basename(String(name));
+  if (!base || base === '.' || base === '..') return null;
+  const full = path.resolve(saveDir, base);
+  const root = path.resolve(saveDir);
+  if (full !== root && !full.startsWith(root + path.sep)) return null;
+  return full;
 }
 
+function copyOneFileByPath(full) {
+  if (!fs.existsSync(full)) return copyFail('文件不存在');
+  if (copyPathsAsFiles([full])) return copyOk();
+  if (isImagePath(full)) return copyImageToClipboard(full);
+  return copyFail('无法拷贝到剪贴板，请重试');
+}
 
 ipcMain.handle('copy-file', (_e, name) => {
-  const full = path.join(fileServer.getSaveDir(), path.basename(name));
+  const full = resolveFileForCopy(name);
+  if (!full) return copyFail('无效的文件名');
   return copyOneFileByPath(full);
 });
 
