@@ -28,9 +28,7 @@ do_build() {
     echo "✗ 打包失败：未找到 ${APP_PATH}"
     exit 1
   fi
-  node "${ROOT}/scripts/publish-release.js"
   echo "✓ 打包完成：${APP_PATH}"
-  echo "  若旧版正在运行，打开后会提示可升级"
 }
 
 do_launch() {

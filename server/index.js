@@ -67,7 +67,6 @@ function createServer(options = {}) {
     publicDir,
     port = DEFAULT_PORT,
     onUpload,
-    getUpdateCheck,
   } = options;
 
   const events = new EventEmitter();
@@ -100,27 +99,6 @@ function createServer(options = {}) {
       qrDataUrl,
       saveDir: currentSaveDir,
     });
-  });
-
-  function readBuildInfo() {
-    try {
-      const raw = fs.readFileSync(path.join(publicDir, 'build-info.json'), 'utf8');
-      return JSON.parse(raw);
-    } catch {
-      return { version: '0', buildTime: 0, buildId: 'dev' };
-    }
-  }
-
-  app.get('/api/update-check', (_req, res) => {
-    try {
-      if (typeof getUpdateCheck === 'function') {
-        return sendJson(res, getUpdateCheck());
-      }
-      const current = readBuildInfo();
-      sendJson(res, { available: false, current, latest: null, reason: 'web_only' });
-    } catch (err) {
-      sendJson(res, { ok: false, error: err.message || 'check failed' });
-    }
   });
 
   app.get('/api/files', (_req, res) => {

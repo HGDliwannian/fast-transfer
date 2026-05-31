@@ -10,9 +10,6 @@
   const filesAppendZone = document.getElementById('filesAppendZone');
   const filesBody = document.getElementById('filesBody');
   const fileCountEl = document.getElementById('fileCount');
-  const btnDeleteAll = document.getElementById('btnDeleteAll');
-  const btnCopySelected = document.getElementById('btnCopySelected');
-  const selectionCountEl = document.getElementById('selectionCount');
   const previewPane = document.getElementById('previewPane');
   const previewFileName = document.getElementById('previewFileName');
   const previewFileMeta = document.getElementById('previewFileMeta');
@@ -115,46 +112,23 @@
         const blob = await res.blob();
         const type = blob.type || 'image/png';
         await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-        return (await verifyClipboardImage()) ? { ok: true } : { ok: false, message: '复制失败' };
+        return (await verifyClipboardImage()) ? { ok: true } : { ok: false, message: '拷贝失败' };
       }
       await navigator.clipboard.writeText(url);
-      return (await verifyClipboardText(url)) ? { ok: true } : { ok: false, message: '复制失败' };
+      return (await verifyClipboardText(url)) ? { ok: true } : { ok: false, message: '拷贝失败' };
     } catch (err) {
-      return { ok: false, message: err.message || '复制失败' };
-    }
-  }
-
-  async function copyFilesToClipboard(files) {
-    if (!files.length) return { ok: false, message: '请先选择文件' };
-    if (files.length === 1) return copyFileToClipboard(files[0]);
-    try {
-      const text = files.map((f) => C.fileUrl(f)).join('\n');
-      await navigator.clipboard.writeText(text);
-      return (await verifyClipboardText(text)) ? { ok: true } : { ok: false, message: '批量复制失败' };
-    } catch (err) {
-      return { ok: false, message: err.message || '批量复制失败' };
+      return { ok: false, message: err.message || '拷贝失败' };
     }
   }
 
   async function runCopy(copyFn) {
     const res = await copyFn();
-    if (res?.ok) await showToast('已复制到剪贴板');
-    else await showToast(res?.message || '复制失败', 500, 'error');
+    if (res?.ok) await showToast('已拷贝到剪贴板');
+    else await showToast(res?.message || '拷贝失败', 500, 'error');
     return res;
   }
 
-  function getSelectedFiles() {
-    return allFiles.filter((f) => selectedNames.has(f.name));
-  }
-
   function updateSelectionUi() {
-    const count = selectedNames.size;
-    if (selectionCountEl) {
-      selectionCountEl.textContent = `已选 ${count}`;
-      selectionCountEl.classList.toggle('hidden', count === 0);
-    }
-    if (btnCopySelected) btnCopySelected.disabled = count === 0;
-    if (btnDeleteAll) btnDeleteAll.disabled = count === 0;
     document.querySelectorAll('.m-file-list li[data-name]').forEach((li) => {
       li.classList.toggle('checked', selectedNames.has(li.dataset.name));
     });
@@ -328,54 +302,11 @@
     fileInput?.click();
   });
 
-  document.getElementById('btnRefresh')?.addEventListener('click', async () => {
-    await refreshFiles();
-    await showToast('刷新成功');
-  });
-
-  document.getElementById('btnCheckUpdate')?.addEventListener('click', async () => {
-    try {
-      const info = await C.checkUpdate();
-      if (info?.available) {
-        const label = `v${info.latest?.version || '—'}`;
-        await showConfirm(`发现新版本 ${label}，是否立即升级？\n\n升级将退出当前应用并打开最新构建。`);
-        return;
-      }
-      await showToast('当前已是最新版本');
-    } catch {
-      await showToast('检查更新失败', 500, 'error');
-    }
-  });
-
   btnClosePreview?.addEventListener('click', closePreview);
 
   btnCopyFile?.addEventListener('click', async () => {
     if (!selectedFile) return;
     await runCopy(() => copyFileToClipboard(selectedFile));
-  });
-
-  btnCopySelected?.addEventListener('click', async () => {
-    const files = getSelectedFiles();
-    await runCopy(() => copyFilesToClipboard(files));
-  });
-
-  btnDeleteAll?.addEventListener('click', async () => {
-    const names = [...selectedNames];
-    if (!names.length) return;
-    const ok = await showConfirm(`确定删除 ${names.length} 个文件？`);
-    if (!ok) return;
-    btnDeleteAll.disabled = true;
-    try {
-      for (const name of names) {
-        await C.deleteFileByName(name);
-        selectedNames.delete(name);
-      }
-      closePreview();
-      await refreshFiles();
-    } catch (err) {
-      await showToast(err.message || '删除失败', 500, 'error');
-      await refreshFiles();
-    }
   });
 
   if ('Notification' in window && Notification.permission === 'default') {

@@ -2,14 +2,9 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, shell, Not
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { createServer, DEFAULT_PORT } = require('../server/index');
-const {
-  readCurrentBuildInfo,
-  checkForUpdate,
-  applyUpdate,
-} = require('./update');
 
 const isDev = !app.isPackaged || process.argv.includes('--dev');
 let mainWindow = null;
@@ -79,31 +74,6 @@ function applyLaunchAtLogin(enabled) {
   }
 }
 
-function notifyUpdateAvailable(result) {
-  if (!result?.available) return;
-  if (Notification.isSupported()) {
-    new Notification({
-      title: '快传有新版本',
-      body: `v${result.latest.version} 已就绪，点击应用内「立即升级」`,
-    }).show();
-  }
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('update-available', result);
-  }
-}
-
-function runUpdateCheck(silent = true) {
-  const result = checkForUpdate();
-  if (result.available) {
-    const cfg = loadConfig();
-    if (cfg.dismissedBuildId === result.latest.buildId) return result;
-    notifyUpdateAvailable(result);
-  } else if (!silent && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('update-check-result', result);
-  }
-  return result;
-}
-
 function notifyNewFile(file) {
   if (Notification.isSupported()) {
     new Notification({
@@ -134,7 +104,6 @@ async function startServer() {
     publicDir: getPublicDir(),
     port: cfg.port || DEFAULT_PORT,
     onUpload: notifyNewFile,
-    getUpdateCheck: checkForUpdate,
   });
 
   const info = await fileServer.start();
@@ -298,12 +267,63 @@ async function buildServerStatus() {
 
 ipcMain.handle('get-status', () => buildServerStatus());
 
-// AIGC START
+function readBuildInfo() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(getPublicDir(), 'build-info.json'), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function resolveProjectRoot() {
+  const fromEnv = process.env.FILE_TRANSFER_ACCESS_ROOT;
+  if (fromEnv && fs.existsSync(path.join(fromEnv, 'scripts/enable.sh'))) {
+    return path.resolve(fromEnv);
+  }
+  const cfg = loadConfig();
+  if (cfg.projectRoot && fs.existsSync(path.join(cfg.projectRoot, 'scripts/enable.sh'))) {
+    return path.resolve(cfg.projectRoot);
+  }
+  const info = readBuildInfo();
+  if (info.projectRoot && fs.existsSync(path.join(info.projectRoot, 'scripts/enable.sh'))) {
+    return path.resolve(info.projectRoot);
+  }
+  if (isDev) {
+    return path.resolve(__dirname, '..');
+  }
+  return null;
+}
+
 ipcMain.handle('restart-service', async () => {
   await startServer();
-  return buildServerStatus();
+  const status = await buildServerStatus();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.reload();
+  }
+  return status;
 });
-// AIGC END
+
+ipcMain.handle('run-enable', async () => {
+  const root = resolveProjectRoot();
+  if (!root) {
+    return {
+      ok: false,
+      message: '未找到项目目录，请在项目根目录执行 npm run enable',
+    };
+  }
+  const script = path.join(root, 'scripts/enable.sh');
+  const child = spawn('bash', [script], {
+    cwd: root,
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+  setTimeout(() => {
+    app.isQuitting = true;
+    app.quit();
+  }, 400);
+  return { ok: true, message: '正在重新打包并启动…' };
+});
 
 ipcMain.handle('get-settings', () => {
   const cfg = loadConfig();
@@ -339,16 +359,6 @@ ipcMain.handle('open-save-dir', () => {
   return dir;
 });
 
-ipcMain.handle('open-file', (_e, name) => {
-  const full = path.join(fileServer.getSaveDir(), path.basename(name));
-  shell.openPath(full);
-});
-
-ipcMain.handle('reveal-file', (_e, name) => {
-  const full = path.join(fileServer.getSaveDir(), path.basename(name));
-  shell.showItemInFolder(full);
-});
-
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.heic'];
 
 const OSASCRIPT_OPTS = {
@@ -365,7 +375,7 @@ function copyOk() {
   return { ok: true };
 }
 
-function copyFail(message = '复制失败') {
+function copyFail(message = '拷贝失败') {
   return { ok: false, message };
 }
 
@@ -377,7 +387,6 @@ function isImagePath(full) {
   return IMAGE_EXTS.includes(fileExt(full));
 }
 
-// AIGC START
 function resolveExistingPaths(paths) {
   return paths
     .map((p) => path.resolve(p))
@@ -525,71 +534,32 @@ function copyOneFileByPath(full) {
   return copyPathsAsFiles([full]) ? copyOk() : copyFail();
 }
 
-function copyManyFilesByPaths(paths) {
-  return copyPathsAsFiles(paths) ? copyOk() : copyFail('批量复制失败');
-}
-// AIGC END
 
 ipcMain.handle('copy-file', (_e, name) => {
   const full = path.join(fileServer.getSaveDir(), path.basename(name));
   return copyOneFileByPath(full);
 });
 
-ipcMain.handle('copy-files', (_e, names) => {
-  if (!Array.isArray(names) || !names.length) {
-    return { ok: false, message: '请先选择文件' };
-  }
-
-  const paths = names.map((name) => path.join(fileServer.getSaveDir(), path.basename(name)));
-  if (!resolveExistingPaths(paths).length) return { ok: false, message: '文件不存在' };
-
-  // 批量复制一律按文件写入剪贴板（含单张图片、多图、非图片）
-  return copyManyFilesByPaths(paths);
-});
-
-ipcMain.handle('get-version-info', () => {
-  const current = readCurrentBuildInfo();
-  const check = checkForUpdate();
-  return {
-    current,
-    update: check,
-    isPackaged: app.isPackaged,
-  };
-});
-
-ipcMain.handle('check-update', (_e, silent = false) => runUpdateCheck(silent));
-
-ipcMain.handle('dismiss-update', (_e, buildId) => {
-  const cfg = loadConfig();
-  cfg.dismissedBuildId = buildId;
-  saveConfig(cfg);
-  return true;
-});
-
-ipcMain.handle('apply-update', async () => applyUpdate(mainWindow));
-
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
     showMainWindow();
-    runUpdateCheck(true);
   });
 }
 
 app.whenReady().then(async () => {
   const cfg = loadConfig();
+  if (isDev && !cfg.projectRoot) {
+    cfg.projectRoot = path.resolve(__dirname, '..');
+    saveConfig(cfg);
+  }
   applyLaunchAtLogin(cfg.launchAtLogin === true);
 
   const info = await startServer();
   const localUrl = `http://127.0.0.1:${info.port}/`;
   createWindow(localUrl);
   createTray();
-
-  if (app.isPackaged) {
-    setTimeout(() => runUpdateCheck(true), 1500);
-    setInterval(() => runUpdateCheck(true), 60 * 1000);
-  }
 });
 
 app.on('window-all-closed', () => {

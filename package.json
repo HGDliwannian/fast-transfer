@@ -12,7 +12,7 @@
     "build:mac": "electron-builder --mac dmg --arm64",
     "prebuild:mac:app": "node scripts/generate-build-info.js",
     "build:mac:app": "electron-builder --mac --arm64 --dir",
-    "postbuild:mac:app": "node scripts/finalize-build.js && node scripts/publish-release.js",
+    "postbuild:mac:app": "node scripts/finalize-build.js",
     "build:win": "electron-builder --win --x64",
     "enable": "bash scripts/enable.sh",
     "enable:launch": "bash scripts/enable.sh --launch",

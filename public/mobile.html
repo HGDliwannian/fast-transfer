@@ -14,10 +14,6 @@
       <h1>快传</h1>
       <p class="m-tagline">手机端 · 实时同步</p>
     </div>
-    <div class="m-topbar-actions">
-      <button id="btnCheckUpdate" type="button" class="m-btn m-btn--ghost m-btn--sm">检查更新</button>
-      <button id="btnRefresh" type="button" class="m-btn m-btn--ghost m-btn--sm">刷新</button>
-    </div>
   </header>
 
   <p id="uploadStatus" class="m-status" role="status"></p>
@@ -51,18 +47,10 @@
         </div>
         <div class="m-preview-actions">
           <a id="btnDownload" class="m-btn m-btn--primary" href="#" download>下载</a>
-          <button id="btnCopyFile" type="button" class="m-btn">复制</button>
+          <button id="btnCopyFile" type="button" class="m-btn">拷贝</button>
         </div>
       </div>
     </div>
-
-    <footer class="m-files-footer">
-      <span id="selectionCount" class="m-selection hidden">已选 0</span>
-      <div class="m-footer-btns">
-        <button id="btnCopySelected" type="button" class="m-btn" disabled>批量复制</button>
-        <button id="btnDeleteAll" type="button" class="m-btn m-btn--danger" disabled>删除</button>
-      </div>
-    </footer>
   </section>
 
   <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.json,.csv" multiple hidden />

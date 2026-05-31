@@ -118,12 +118,6 @@
     return data;
   }
 
-  async function checkUpdate() {
-    const res = await fetch('/api/update-check');
-    if (!res.ok) throw new Error('check failed');
-    return res.json();
-  }
-
   function connectEvents(handlers) {
     const es = new EventSource('/events');
     es.onmessage = (ev) => {
@@ -155,7 +149,6 @@
     fetchFiles,
     uploadFileList,
     deleteFileByName,
-    checkUpdate,
     connectEvents,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

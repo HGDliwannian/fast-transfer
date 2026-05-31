@@ -5,15 +5,13 @@
   const serverUrlEl = document.getElementById('serverUrl');
   const qrcodeEl = document.getElementById('qrcode');
   const saveDirEl = document.getElementById('saveDir');
+  const saveDirTextEl = document.getElementById('saveDirText');
   const settingsCard = document.getElementById('settingsCard');
   const fileInput = document.getElementById('fileInput');
-  const uploadStatus = document.getElementById('uploadStatus');
   const fileListEl = document.getElementById('fileList');
-  const filesDropArea = document.getElementById('filesDropArea');
   const filesAppendZone = document.getElementById('filesAppendZone');
   const fileCountEl = document.getElementById('fileCount');
   const btnDeleteAll = document.getElementById('btnDeleteAll');
-  const btnCopySelected = document.getElementById('btnCopySelected');
   const selectionCountEl = document.getElementById('selectionCount');
   const previewPane = document.getElementById('previewPane');
   const previewHeader = document.getElementById('previewHeader');
@@ -25,13 +23,8 @@
   const previewFrame = document.getElementById('previewFrame');
   const previewIcon = document.getElementById('previewIcon');
   const previewIconHint = document.getElementById('previewIconHint');
-  const previewActions = document.getElementById('previewActions');
   const filesListPanel = document.getElementById('filesListPanel');
-  const btnDownload = document.getElementById('btnDownload');
-  const btnOpenNative = document.getElementById('btnOpenNative');
-  const btnRevealNative = document.getElementById('btnRevealNative');
   const btnCopyFile = document.getElementById('btnCopyFile');
-  const copyStatusEl = document.getElementById('copyStatus');
   const btnToggleUrl = document.getElementById('btnToggleUrl');
 
   let uploadChain = Promise.resolve();
@@ -42,8 +35,6 @@
   let eventSource = null;
   let realAccessUrl = '';
   let urlRevealed = false;
-  let copyStatusTimer = null;
-  let uploadStatusTimer = null;
 
   const confirmModal = document.getElementById('confirmModal');
   const confirmMessageEl = document.getElementById('confirmMessage');
@@ -55,12 +46,6 @@
   const appToast = document.getElementById('appToast');
   const appToastMessage = document.getElementById('appToastMessage');
 
-  const updateBar = document.getElementById('updateBar');
-  const updateBarText = document.getElementById('updateBarText');
-  const updateModal = document.getElementById('updateModal');
-  const updateModalMessage = document.getElementById('updateModalMessage');
-  const appVersionEl = document.getElementById('appVersion');
-  let pendingUpdate = null;
   let appToastTimer = null;
 
   function showInfoToast(message, ms = 500, variant = 'ok') {
@@ -138,27 +123,7 @@
     document.querySelectorAll('.native-only').forEach((el) => el.classList.remove('hidden'));
   }
 
-  function setUploadStatus(text, type) {
-    uploadStatus.textContent = text;
-    uploadStatus.className = 'status' + (type ? ' ' + type : '');
-    if (uploadStatusTimer) clearTimeout(uploadStatusTimer);
-    if (type === 'ok' || type === 'err') {
-      uploadStatusTimer = setTimeout(() => {
-        uploadStatus.textContent = '';
-        uploadStatus.className = 'status';
-      }, 2000);
-    }
-  }
-
-  const COPY_OK_TOAST = '已复制到剪贴板';
-
-  function setCopyStatus(text) {
-    if (!copyStatusEl) return;
-    copyStatusEl.textContent = text;
-    copyStatusEl.className = 'copy-status';
-    if (copyStatusTimer) clearTimeout(copyStatusTimer);
-    copyStatusTimer = null;
-  }
+  const COPY_OK_TOAST = '已拷贝到剪贴板';
 
   function hideAppToast() {
     if (appToastTimer) {
@@ -173,7 +138,7 @@
     if (res?.ok) {
       showInfoToast(COPY_OK_TOAST, 500);
     } else {
-      showInfoToast(res?.message || '复制失败', 500, 'error');
+      showInfoToast(res?.message || '拷贝失败', 500, 'error');
     }
     return res;
   }
@@ -267,15 +232,22 @@
   }
 
   function renderAccessUrl() {
+    const revealed = urlRevealed && !!realAccessUrl;
     if (!realAccessUrl) {
       serverUrlEl.textContent = '—';
       serverUrlEl.classList.add('is-masked');
+      qrcodeEl?.classList.add('is-masked');
+      if (btnToggleUrl) {
+        btnToggleUrl.textContent = '显示';
+        btnToggleUrl.disabled = true;
+      }
       return;
     }
-    serverUrlEl.textContent = urlRevealed ? realAccessUrl : maskUrl(realAccessUrl);
-    serverUrlEl.classList.toggle('is-masked', !urlRevealed);
+    serverUrlEl.textContent = revealed ? realAccessUrl : maskUrl(realAccessUrl);
+    serverUrlEl.classList.toggle('is-masked', !revealed);
+    qrcodeEl?.classList.toggle('is-masked', !revealed);
     if (btnToggleUrl) {
-      btnToggleUrl.textContent = urlRevealed ? '隐藏' : '显示';
+      btnToggleUrl.textContent = revealed ? '隐藏' : '显示';
       btnToggleUrl.disabled = false;
     }
   }
@@ -302,28 +274,7 @@
       await navigator.clipboard.writeText(url);
       return { ok: true };
     } catch (err) {
-      return { ok: false, message: err.message || '复制失败' };
-    }
-  }
-
-  function getSelectedFiles() {
-    return allFiles.filter((f) => selectedNames.has(f.name));
-  }
-
-  async function copyFilesToClipboard(files) {
-    if (!files.length) return { ok: false, message: '请先选择文件' };
-    if (files.length === 1) return copyFileToClipboard(files[0]);
-
-    if (isNative) {
-      return window.snapdrop.copyFiles(files.map((f) => f.name));
-    }
-
-    try {
-      const text = files.map((f) => fileUrl(f)).join('\n');
-      await navigator.clipboard.writeText(text);
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, message: err.message || '批量复制失败' };
+      return { ok: false, message: err.message || '拷贝失败' };
     }
   }
 
@@ -334,7 +285,6 @@
       selectionCountEl.classList.toggle('has-selection', count > 0);
       selectionCountEl.classList.toggle('hidden', count === 0);
     }
-    if (btnCopySelected) btnCopySelected.disabled = count === 0;
     if (btnDeleteAll) btnDeleteAll.disabled = count === 0;
 
     document.querySelectorAll('.file-list li[data-name]').forEach((li) => {
@@ -359,14 +309,14 @@
     updateSelectionUi();
   }
 
-  async function copySelectedFiles() {
-    const files = getSelectedFiles();
-    return runCopyWithFastToast(() => copyFilesToClipboard(files));
-  }
+  const previewDock = previewPane?.querySelector('.preview-dock');
 
   function setPreviewStageLayout(layout) {
-    previewStage?.classList.toggle('preview-stage--centered', layout === 'centered');
     previewStage?.classList.toggle('preview-stage--pdf', layout === 'pdf');
+    previewStage?.classList.toggle('preview-stage--inline', layout === 'inline');
+    const useDock = layout !== 'inline' && layout !== 'pdf';
+    previewPane?.classList.toggle('preview-pane--dock', useDock);
+    previewDock?.classList.toggle('hidden', !useDock);
   }
 
   function showPreview(file) {
@@ -376,7 +326,6 @@
     previewIcon.hidden = true;
     previewIcon.innerHTML = '';
     previewIconHint?.classList.add('hidden');
-    previewActions.classList.add('hidden');
     previewHeader?.classList.add('hidden');
     setPreviewStageLayout(null);
 
@@ -386,7 +335,9 @@
         previewEmpty.hidden = false;
         previewEmpty.querySelector('.empty-text').textContent = '点击文件进行预览';
       }
-      setPreviewStageLayout('centered');
+      // AIGC START
+      if (btnCopyFile) btnCopyFile.disabled = true;
+      // AIGC END
       return;
     }
 
@@ -403,24 +354,14 @@
 
     if (previewEmpty) previewEmpty.hidden = true;
     const url = fileUrl(file);
-    btnDownload.href = url;
-    btnDownload.download = file.name;
-    previewActions.classList.remove('hidden');
-    setCopyStatus('');
+    // AIGC START
     if (btnCopyFile) btnCopyFile.disabled = false;
-
-    if (isNative) {
-      btnOpenNative.classList.remove('hidden');
-      btnRevealNative.classList.remove('hidden');
-    } else {
-      btnOpenNative.classList.add('hidden');
-      btnRevealNative.classList.add('hidden');
-    }
+    // AIGC END
 
     if (isImage(file.name)) {
       previewImg.src = url;
       previewImg.hidden = false;
-      setPreviewStageLayout('centered');
+      setPreviewStageLayout('inline');
     } else if (/\.pdf$/i.test(file.name)) {
       previewFrame.src = url;
       previewFrame.hidden = false;
@@ -428,11 +369,11 @@
     } else {
       previewIcon.innerHTML = buildFileThumbHtml(file);
       previewIcon.hidden = false;
-      setPreviewStageLayout('centered');
       if (previewIconHint) {
-        previewIconHint.textContent = isNative ? '此格式请点「本机打开」' : '此格式请点「下载」查看';
+        previewIconHint.textContent = '此格式暂不支持内嵌预览';
         previewIconHint.classList.remove('hidden');
       }
+      setPreviewStageLayout(null);
       const video = previewIcon.querySelector('.thumb-video');
       if (video) {
         video.addEventListener('loadeddata', () => {
@@ -447,7 +388,8 @@
     if (status.qrDataUrl && qrcodeEl) {
       qrcodeEl.innerHTML = `<img src="${status.qrDataUrl}" alt="扫码访问" />`;
     }
-    if (saveDirEl) saveDirEl.textContent = status.saveDir || '—';
+    renderAccessUrl();
+    if (saveDirTextEl) saveDirTextEl.textContent = status.saveDir || '—';
   }
 
   async function loadAccessInfo() {
@@ -471,7 +413,6 @@
     }
   }
 
-  // AIGC START
   async function reloadServiceAndAccess() {
     if (isNative && window.snapdrop?.restartService) {
       const status = await window.snapdrop.restartService();
@@ -480,22 +421,24 @@
     }
     await loadAccessInfo();
   }
-  // AIGC END
 
   async function doUpload(files) {
     if (!files.length) return;
-    setUploadStatus('上传中…');
+    hideAppToast();
+    showInfoToast('上传中…', 60000);
     const form = new FormData();
     files.forEach((f) => form.append('files', f, f.name));
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '上传失败');
-      setUploadStatus(`已上传 ${data.files?.length || files.length} 个`, 'ok');
+      hideAppToast();
+      await showInfoToast(`已上传 ${data.files?.length || files.length} 个`, 800, 'ok');
       if (data.files?.[0]) await refreshFiles(data.files[0].name);
       else await refreshFiles();
     } catch (err) {
-      setUploadStatus(err.message || '上传失败', 'err');
+      hideAppToast();
+      await showInfoToast(err.message || '上传失败', 800, 'error');
     }
   }
 
@@ -507,34 +450,18 @@
   }
 
   function buildEmptyListHtml() {
-    return `<li class="files-dropzone-hint">
-      <span class="files-dropzone__icon" aria-hidden="true">↑</span>
-      拖放或点击上传<br>
-      <span class="files-dropzone__sub">图片、文档等 · 上传后各端实时同步</span>
-    </li>`;
+    return '';
   }
 
   function setEmptyDropzone(active) {
-    filesDropArea?.classList.toggle('files-drop-area--empty', active);
-    filesDropArea?.toggleAttribute('role', active ? 'button' : false);
-    filesDropArea?.toggleAttribute('tabindex', active ? '0' : false);
     fileListEl.classList.toggle('file-list--empty', active);
-    filesAppendZone?.classList.toggle('hidden', active);
+    filesAppendZone?.classList.toggle('files-append-zone--upload', active);
+    filesAppendZone?.classList.toggle('files-append-zone--add', !active);
   }
 
   function bindUploadZones() {
-    if (!filesDropArea || filesDropArea.dataset.bound) return;
-    filesDropArea.dataset.bound = '1';
-    filesDropArea.addEventListener('click', (e) => {
-      if (filesDropArea.classList.contains('files-drop-area--empty')) fileInput.click();
-    });
-    filesDropArea.addEventListener('keydown', (e) => {
-      if (!filesDropArea.classList.contains('files-drop-area--empty')) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        fileInput.click();
-      }
-    });
+    if (!filesAppendZone || filesAppendZone.dataset.bound) return;
+    filesAppendZone.dataset.bound = '1';
     filesAppendZone?.addEventListener('click', (e) => {
       e.stopPropagation();
       fileInput.click();
@@ -584,6 +511,9 @@
     allFiles = files;
     const prevSelected = new Set(selectedNames);
     selectedNames = new Set(files.filter((f) => prevSelected.has(f.name)).map((f) => f.name));
+    if (selectName && files.some((f) => f.name === selectName)) {
+      selectedNames = new Set([selectName]);
+    }
 
     fileCountEl.textContent = String(files.length);
     fileListEl.innerHTML = '';
@@ -624,20 +554,36 @@
         const modKey = e.metaKey || e.ctrlKey;
         if (e.shiftKey && lastSelectIndex >= 0) {
           selectRange(lastSelectIndex, index);
-          selectItem(li, file);
+          selectItem(li, file, { scroll: true });
           lastSelectIndex = index;
           return;
         }
         if (modKey) {
           toggleFileSelection(file.name, !selectedNames.has(file.name));
-          selectItem(li, file);
+          selectItem(li, file, { scroll: true });
           lastSelectIndex = index;
+          return;
+        }
+        if (li.classList.contains('active')) {
+          selectedNames.delete(file.name);
+          updateSelectionUi();
+          li.classList.remove('active');
+          if (selectedNames.size === 0) {
+            showPreview(null);
+            lastSelectIndex = -1;
+          } else {
+            const nextName = [...selectedNames][0];
+            const nextFile = allFiles.find((f) => f.name === nextName);
+            const nextLi = fileListEl.querySelector(`li[data-name="${CSS.escape(nextName)}"]`);
+            if (nextFile && nextLi) selectItem(nextLi, nextFile, { scroll: false });
+            else showPreview(null);
+          }
           return;
         }
         selectedNames.clear();
         selectedNames.add(file.name);
         updateSelectionUi();
-        selectItem(li, file);
+        selectItem(li, file, { scroll: true });
         lastSelectIndex = index;
       });
 
@@ -655,17 +601,19 @@
 
       setupListThumb(li, file);
       fileListEl.appendChild(li);
-      if (selectName === file.name) selectItem(li, file);
+      if (selectName === file.name) selectItem(li, file, { scroll: false });
     });
 
     updateSelectionUi();
   }
 
-  function selectItem(li, file) {
+  function selectItem(li, file, options = {}) {
     document.querySelectorAll('.file-list li').forEach((el) => el.classList.remove('active'));
     li.classList.add('active');
     showPreview(file);
-    li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (options.scroll && fileListEl && fileListEl.scrollHeight > fileListEl.clientHeight) {
+      li.scrollIntoView({ block: 'nearest' });
+    }
   }
 
   function setupDropzone() {
@@ -719,43 +667,46 @@
     };
   }
 
-  document.getElementById('btnRefresh').addEventListener('click', async () => {
-    const btn = document.getElementById('btnRefresh');
-    if (btn) btn.disabled = true;
+  const btnRefresh = document.getElementById('btnRefresh');
+  let refreshBusy = false;
+
+  function resetRefreshButton() {
+    refreshBusy = false;
+    if (!btnRefresh) return;
+    btnRefresh.disabled = false;
+    btnRefresh.textContent = '重启';
+  }
+
+  btnRefresh?.addEventListener('click', async () => {
+    if (!btnRefresh || refreshBusy) return;
+    refreshBusy = true;
+    btnRefresh.disabled = true;
+    btnRefresh.textContent = '重启中…';
+    const safetyTimer = setTimeout(resetRefreshButton, 120000);
+
+    let enableStarted = false;
     try {
+      if (isNative && window.snapdrop?.runEnable) {
+        const res = await window.snapdrop.runEnable();
+        if (!res?.ok) throw new Error(res?.message || '重启失败');
+        enableStarted = true;
+        clearTimeout(safetyTimer);
+        await showInfoToast(res.message || '正在重新打包并启动…', 1500);
+        return;
+      }
       await reloadServiceAndAccess();
       connectEvents();
       await refreshFiles();
-      await showInfoToast('刷新成功');
-    } catch {
-      await showInfoToast('刷新失败', 500, 'error');
+      await showInfoToast('重启成功');
+    } catch (err) {
+      await showInfoToast(err?.message || '重启失败', 500, 'error');
     } finally {
-      if (btn) btn.disabled = false;
+      clearTimeout(safetyTimer);
+      if (!enableStarted) resetRefreshButton();
     }
   });
 
-  async function onCheckUpdateClick() {
-    if (!isNative) return;
-    try {
-      const info = await window.snapdrop.checkUpdate(false);
-      if (info?.available) {
-        showUpdateModal(info);
-      } else {
-        await showInfoToast('当前已是最新版本');
-        await refreshVersionInfo();
-      }
-    } catch {
-      await showInfoToast('检查更新失败');
-    }
-  }
-
-  if (isNative) {
-    document.getElementById('btnCheckUpdate')?.addEventListener('click', onCheckUpdateClick);
-  }
-
   btnDeleteAll?.addEventListener('click', deleteSelectedFiles);
-
-  btnCopySelected?.addEventListener('click', copySelectedFiles);
 
   btnToggleUrl?.addEventListener('click', () => {
     if (!realAccessUrl) return;
@@ -768,76 +719,9 @@
     await runCopyWithFastToast(() => copyFileToClipboard(selectedFile));
   });
 
-  function formatBuildTime(ms) {
-    if (!ms) return '';
-    return new Date(ms).toLocaleString('zh-CN', { hour12: false });
-  }
-
-  function showUpdateUi(result) {
-    if (!result?.available || !result.latest) {
-      updateBar?.classList.add('hidden');
-      pendingUpdate = null;
-      return;
-    }
-    pendingUpdate = result;
-    const label = `新版本 v${result.latest.version}（${formatBuildTime(result.latest.buildTime)}）`;
-    if (updateBarText) updateBarText.textContent = `发现${label}，可升级`;
-    updateBar?.classList.remove('hidden');
-  }
-
-  function showUpdateModal(result) {
-    if (!result?.available) return;
-    pendingUpdate = result;
-    const label = `v${result.latest.version}`;
-    updateModalMessage.textContent = `发现新版本 ${label}，是否立即升级？\n\n升级将退出当前应用并打开最新构建。`;
-    updateModal.classList.remove('hidden');
-  }
-
-  function hideUpdateModal() {
-    updateModal?.classList.add('hidden');
-  }
-
-  async function onUpgradeClick() {
-    const res = await window.snapdrop.applyUpdate();
-    if (res?.message && !res.ok) await showInfo(res.message);
-  }
-
-  async function onLaterClick() {
-    if (pendingUpdate?.latest?.buildId) {
-      await window.snapdrop.dismissUpdate(pendingUpdate.latest.buildId);
-    }
-    updateBar?.classList.add('hidden');
-    hideUpdateModal();
-  }
-
-  async function refreshVersionInfo() {
-    if (!isNative || !appVersionEl) return;
-    const info = await window.snapdrop.getVersionInfo();
-    const cur = info.current;
-    appVersionEl.textContent = `v${cur.version}`;
-    showUpdateUi(info.update);
-    return info;
-  }
-
   if (isNative) {
-    document.getElementById('btnOpenDir').addEventListener('click', () => window.snapdrop.openSaveDir());
-    btnOpenNative.addEventListener('click', () => {
-      if (selectedFile) window.snapdrop.openFile(selectedFile.name);
-    });
-    btnRevealNative.addEventListener('click', () => {
-      if (selectedFile) window.snapdrop.revealFile(selectedFile.name);
-    });
+    saveDirEl?.addEventListener('click', () => window.snapdrop.openSaveDir());
     window.snapdrop.onFileUploaded((file) => refreshFiles(file.name));
-
-    document.getElementById('updateBarUpgrade')?.addEventListener('click', onUpgradeClick);
-    document.getElementById('updateModalUpgrade')?.addEventListener('click', onUpgradeClick);
-    document.getElementById('updateBarLater')?.addEventListener('click', onLaterClick);
-    document.getElementById('updateModalLater')?.addEventListener('click', onLaterClick);
-    updateModal.querySelector('[data-update-dismiss]')?.addEventListener('click', onLaterClick);
-    window.snapdrop.onUpdateAvailable((data) => {
-      showUpdateUi(data);
-      showUpdateModal(data);
-    });
   } else if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
@@ -849,7 +733,6 @@
       refreshFiles().catch(() => {}),
     ]);
     connectEvents();
-    if (isNative) await refreshVersionInfo().catch(() => {});
   }
 
   init().catch(() => {
