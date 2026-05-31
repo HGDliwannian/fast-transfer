@@ -188,6 +188,26 @@
     return 'unsupported';
   }
 
+  function canCopyFile(name) {
+    const kind = getPreviewKind(name);
+    if (kind === 'unsupported') return false;
+    if (kind === 'docx' && !window.mammoth) return false;
+    if (kind === 'spreadsheet' && !window.XLSX) return false;
+    return true;
+  }
+
+  function updateCopyButtonUi(file, options = {}) {
+    if (!btnCopyFile) return;
+    if (!file) {
+      btnCopyFile.disabled = true;
+      btnCopyFile.textContent = '拷贝';
+      return;
+    }
+    const allowed = !options.previewUnavailable && canCopyFile(file.name);
+    btnCopyFile.disabled = !allowed;
+    btnCopyFile.textContent = allowed ? '拷贝' : '不支持拷贝';
+  }
+
   const PREVIEW_TEXT_MAX = 512 * 1024;
 
   function getFileExtLabel(name) {
@@ -523,6 +543,7 @@
   }
 
   function showUnsupportedDock(file, hint) {
+    updateCopyButtonUi(file, { previewUnavailable: true });
     fillPreviewHeader(file);
     if (previewEmpty) previewEmpty.hidden = true;
     if (previewIconHint) {
@@ -552,13 +573,13 @@
         previewEmpty.hidden = false;
         previewEmpty.querySelector('.empty-text').textContent = '点击文件进行预览';
       }
-      if (btnCopyFile) btnCopyFile.disabled = true;
+      updateCopyButtonUi(null);
       return;
     }
 
     previewPane?.classList.add('has-preview');
     if (previewEmpty) previewEmpty.hidden = true;
-    if (btnCopyFile) btnCopyFile.disabled = false;
+    updateCopyButtonUi(file);
 
     const url = fileUrl(file);
     const kind = getPreviewKind(file.name);
@@ -1053,7 +1074,7 @@
   });
 
   btnCopyFile?.addEventListener('click', async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || btnCopyFile.disabled) return;
     await runCopyWithFastToast(() => copyFileToClipboard(selectedFile));
   });
 
