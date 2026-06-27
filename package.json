@@ -1,7 +1,7 @@
 {
-  "name": "file-transfer-access",
+  "name": "fast-transfer",
   "version": "1.0.0",
-  "description": "Personal LAN file transfer over mobile hotspot — 快传 (KuaiChuan)",
+  "description": "Personal LAN file transfer over mobile hotspot — fast-transfer (快传)",
   "main": "electron/main.js",
   "scripts": {
     "prestart": "bash scripts/build-native.sh",
@@ -22,15 +22,16 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HGDliwannian/file-transfer-access.git"
+    "url": "https://github.com/HGDliwannian/fast-transfer.git"
   },
   "bugs": {
-    "url": "https://github.com/HGDliwannian/file-transfer-access/issues"
+    "url": "https://github.com/HGDliwannian/fast-transfer/issues"
   },
-  "homepage": "https://github.com/HGDliwannian/file-transfer-access#readme",
+  "homepage": "https://github.com/HGDliwannian/fast-transfer#readme",
   "keywords": [
     "electron",
     "lan",
+    "fast-transfer",
     "file-transfer",
     "hotspot",
     "snapdrop",
@@ -53,7 +54,7 @@
     "xlsx": "^0.18.5"
   },
   "build": {
-    "appId": "com.kuaichuan.file-transfer",
+    "appId": "com.fasttransfer.app",
     "productName": "快传",
     "directories": {
       "output": "dist"

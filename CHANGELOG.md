@@ -27,4 +27,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - LAN-only design; no cloud account or public relay
 
-[1.0.0]: https://github.com/HGDliwannian/file-transfer-access/releases/tag/v1.0.0
+[1.0.0]: https://github.com/HGDliwannian/fast-transfer/releases/tag/v1.0.0

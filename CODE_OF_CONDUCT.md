@@ -33,7 +33,7 @@ Examples of unacceptable behavior:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainer via [GitHub Issues](https://github.com/HGDliwannian/file-transfer-access/issues).
+reported to the project maintainer via [GitHub Issues](https://github.com/HGDliwannian/fast-transfer/issues).
 
 All complaints will be reviewed and investigated promptly and fairly.
 

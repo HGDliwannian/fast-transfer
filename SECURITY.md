@@ -20,7 +20,7 @@
 
 If you discover a security issue, please **do not** open a public GitHub issue for sensitive reports.
 
-Instead, open a [GitHub Security Advisory](https://github.com/HGDliwannian/file-transfer-access/security/advisories/new) or email the maintainer via GitHub profile contact.
+Instead, open a [GitHub Security Advisory](https://github.com/HGDliwannian/fast-transfer/security/advisories/new) or email the maintainer via GitHub profile contact.
 
 Include:
 

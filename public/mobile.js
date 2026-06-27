@@ -1,6 +1,6 @@
 // AIGC START
 (function () {
-  const C = window.KuaiChuanCore;
+  const C = window.FastTransferCore;
   if (!C) return;
 
   const fileInput = document.getElementById('fileInput');

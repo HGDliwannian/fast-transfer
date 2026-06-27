@@ -1,4 +1,4 @@
-# 快传 (KuaiChuan / file-transfer-access)
+# 快传 (fast-transfer)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-35-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -77,8 +77,8 @@
 ### 方式一：自行构建（推荐开发者）
 
 ```bash
-git clone https://github.com/HGDliwannian/file-transfer-access.git
-cd file-transfer-access
+git clone https://github.com/HGDliwannian/fast-transfer.git
+cd fast-transfer
 npm install
 npm run build:mac:app    # macOS arm64，产出 dist/mac-arm64/快传.app
 # 或
@@ -126,9 +126,9 @@ npm start
 
 | 操作 | 命令 / 文件 |
 |------|-------------|
-| 完整启用（停旧进程→打包→启动） | `npm run enable` 或双击 `scripts/快传-启用.command` |
+| 完整启用（停旧进程→打包→启动） | `npm run enable` 或双击 `scripts/fast-transfer-enable.command` |
 | 仅启动已有 .app | `npm run enable:launch` |
-| 停止 | `npm run stop` 或双击 `scripts/快传-停止.command` |
+| 停止 | `npm run stop` 或双击 `scripts/fast-transfer-stop.command` |
 
 ---
 
@@ -186,7 +186,7 @@ npm run stop           # 停止运行中的实例
 ## 项目结构
 
 ```
-file-transfer-access/
+fast-transfer/
 ├── electron/           # Electron 主进程、预加载、更新逻辑
 ├── server/             # Express 文件服务、SSE、API
 ├── public/             # 统一 H5 界面（index.html, app.js, app.css）

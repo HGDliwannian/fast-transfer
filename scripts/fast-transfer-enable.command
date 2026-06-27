@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIGC START — 双击此文件：停止旧实例 → 打包 → 启动快传
+# AIGC START — 双击：停止旧实例 → 打包 → 启动 fast-transfer（快传）
 cd "$(dirname "$0")/.."
 ./scripts/enable.sh
 echo ""

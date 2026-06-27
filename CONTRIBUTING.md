@@ -1,4 +1,4 @@
-# Contributing to 快传 (file-transfer-access)
+# Contributing to 快传 (fast-transfer)
 
 Thank you for your interest in contributing! This project welcomes bug reports, feature suggestions, documentation improvements, and pull requests.
 
@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This project welcomes bug reports, 
 
 ### Report a bug or request a feature
 
-1. Search [existing issues](https://github.com/HGDliwannian/file-transfer-access/issues) to avoid duplicates.
+1. Search [existing issues](https://github.com/HGDliwannian/fast-transfer/issues) to avoid duplicates.
 2. Open a new issue with:
    - Clear title and description
    - Steps to reproduce (for bugs)
@@ -27,8 +27,8 @@ Thank you for your interest in contributing! This project welcomes bug reports, 
 ## Development setup
 
 ```bash
-git clone https://github.com/HGDliwannian/file-transfer-access.git
-cd file-transfer-access
+git clone https://github.com/HGDliwannian/fast-transfer.git
+cd fast-transfer
 npm install
 npm start
 ```

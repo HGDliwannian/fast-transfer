@@ -134,7 +134,7 @@
     return es;
   }
 
-  global.KuaiChuanCore = {
+  const api = {
     baseUrl,
     formatSize,
     formatTime,
@@ -151,4 +151,5 @@
     deleteFileByName,
     connectEvents,
   };
+  global.FastTransferCore = api;
 })(typeof window !== 'undefined' ? window : globalThis);
