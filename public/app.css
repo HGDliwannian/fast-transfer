@@ -488,7 +488,7 @@ body.is-electron .electron-only.mac-btn--compact {
   outline-offset: 2px;
 }
 
-/* AIGC START — 二维码与显示按钮同宽、按钮在码下方 */
+/* AIGC START — 二维码点击切换显示/隐藏 */
 .access-qr-block {
   --access-qr-size: min(200px, 100%);
   display: flex;
@@ -497,13 +497,6 @@ body.is-electron .electron-only.mac-btn--compact {
   width: var(--access-qr-size);
   max-width: 100%;
   margin: 0 auto 12px;
-  gap: 10px;
-}
-
-.access-reveal-btn {
-  width: 100%;
-  box-sizing: border-box;
-  justify-content: center;
 }
 
 .qrcode {
@@ -534,6 +527,7 @@ body.is-electron .electron-only.mac-btn--compact {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-sizing: border-box;
+  cursor: pointer;
 }
 
 .qrcode img {

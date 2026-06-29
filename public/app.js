@@ -32,7 +32,7 @@
   let mdPreviewState = { fileName: '', text: '', mode: 'render', renderedHtml: '', renderOk: false };
   const filesListPanel = document.getElementById('filesListPanel');
   const btnCopyFile = document.getElementById('btnCopyFile');
-  const btnToggleUrl = document.getElementById('btnToggleUrl');
+
 
   let uploadChain = Promise.resolve();
   let refreshQueue = Promise.resolve();
@@ -293,19 +293,11 @@
       serverUrlEl.textContent = '—';
       serverUrlEl.classList.add('is-masked');
       qrcodeEl?.classList.add('is-masked');
-      if (btnToggleUrl) {
-        btnToggleUrl.textContent = '显示';
-        btnToggleUrl.disabled = true;
-      }
       return;
     }
     serverUrlEl.textContent = revealed ? realAccessUrl : maskUrl(realAccessUrl);
     serverUrlEl.classList.toggle('is-masked', !revealed);
     qrcodeEl?.classList.toggle('is-masked', !revealed);
-    if (btnToggleUrl) {
-      btnToggleUrl.textContent = revealed ? '隐藏' : '显示';
-      btnToggleUrl.disabled = false;
-    }
   }
 
   function setAccessUrl(url) {
@@ -1033,32 +1025,32 @@
     refreshBusy = false;
     if (!btnRefresh) return;
     btnRefresh.disabled = false;
-    btnRefresh.textContent = '重启';
+    btnRefresh.textContent = '刷新';
   }
 
   btnRefresh?.addEventListener('click', async () => {
     if (!btnRefresh || refreshBusy) return;
     refreshBusy = true;
     btnRefresh.disabled = true;
-    btnRefresh.textContent = '重启中…';
+    btnRefresh.textContent = '刷新中…';
     const safetyTimer = setTimeout(resetRefreshButton, 120000);
 
     try {
       if (isNative && window.snapdrop?.restartService) {
         const status = await window.snapdrop.restartService();
-        if (!status?.ok) throw new Error(status?.message || '重启失败');
+        if (!status?.ok) throw new Error(status?.message || '刷新失败');
         applyAccessStatus(status);
         connectEvents();
         await refreshFiles();
-        await showInfoToast('重启成功');
+        await showInfoToast('刷新成功');
       } else {
         await reloadServiceAndAccess();
         connectEvents();
         await refreshFiles();
-        await showInfoToast('重启成功');
+        await showInfoToast('刷新成功');
       }
     } catch (err) {
-      await showInfoToast(err?.message || '重启失败', 500, 'error');
+      await showInfoToast(err?.message || '刷新失败', 500, 'error');
     } finally {
       clearTimeout(safetyTimer);
       resetRefreshButton();
@@ -1067,7 +1059,7 @@
 
   btnDeleteAll?.addEventListener('click', deleteSelectedFiles);
 
-  btnToggleUrl?.addEventListener('click', () => {
+  qrcodeEl?.addEventListener('click', () => {
     if (!realAccessUrl) return;
     urlRevealed = !urlRevealed;
     renderAccessUrl();
