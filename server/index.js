@@ -255,7 +255,13 @@ function createServer(options = {}) {
     stop() {
       return new Promise((resolve) => {
         if (!this.httpServer) return resolve();
+        // 强制断开所有活跃连接（包括 SSE），防止 close() 挂起
+        if (typeof this.httpServer.closeAllConnections === 'function') {
+          this.httpServer.closeAllConnections();
+        }
         this.httpServer.close(() => resolve());
+        // 超时兜底：5 秒后强制 resolve，避免无限挂起
+        setTimeout(() => resolve(), 5000);
       });
     },
   };

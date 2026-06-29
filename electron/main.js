@@ -5,6 +5,7 @@ const os = require('os');
 const { execFileSync, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { createServer, DEFAULT_PORT } = require('../server/index');
+const QRCode = require('qrcode');
 
 const isDev = !app.isPackaged || process.argv.includes('--dev');
 let mainWindow = null;
@@ -295,12 +296,16 @@ function resolveProjectRoot() {
 }
 
 ipcMain.handle('restart-service', async () => {
-  await startServer();
+  try {
+    await startServer();
+  } catch (err) {
+    return { ok: false, message: `服务重启失败: ${err.message}` };
+  }
   const status = await buildServerStatus();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.reload();
   }
-  return status;
+  return { ...status, ok: true };
 });
 
 ipcMain.handle('run-enable', async () => {

@@ -1046,7 +1046,6 @@
     try {
       if (isNative && window.snapdrop?.restartService) {
         const status = await window.snapdrop.restartService();
-        if (!status?.ok) throw new Error(status?.message || '重启失败');
         applyAccessStatus(status);
         connectEvents();
         await refreshFiles();
